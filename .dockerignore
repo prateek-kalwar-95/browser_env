@@ -1,0 +1,29 @@
+# Host virtualenv (Windows/macOS/Linux) — invalid inside Linux image; breaks `uv sync`
+.venv
+.venv-*
+
+# Python / tooling noise (smaller, faster builds)
+__pycache__
+**/__pycache__
+*.py[cod]
+*$py.class
+*.egg-info
+.eggs
+dist
+build
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Secrets / local env (never bake into image)
+.env
+.env.*
+!.env.example
+
+# VCS / IDE
+.git
+.gitignore
+.idea
+.vscode
