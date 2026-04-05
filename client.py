@@ -1,10 +1,8 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
+"""BrowserEnv client for the IT Helpdesk Portal.
 
-"""BrowserEnv client for the text-controlled intranet simulator."""
+Provides a typed WebSocket client that connects to the environment
+server and exchanges BrowserAction / BrowserObservation payloads.
+"""
 
 from typing import Dict
 
@@ -31,7 +29,16 @@ class BrowserEnv(EnvClient[BrowserAction, BrowserObservation, State]):
             task_instruction=obs_data.get("task_instruction", ""),
             feedback=obs_data.get("feedback", ""),
             command_valid=obs_data.get("command_valid", True),
+            # New sub-goal fields
+            sub_goals_status=obs_data.get("sub_goals_status", {}),
             progress=float(obs_data.get("progress", 0.0)),
+            # Navigation context
+            breadcrumb=list(obs_data.get("breadcrumb", [])),
+            # Session context
+            current_user=obs_data.get("current_user"),
+            notifications=list(obs_data.get("notifications", [])),
+            steps_remaining=int(obs_data.get("steps_remaining", 48)),
+            # Grading
             grader_score=obs_data.get("grader_score"),
             available_commands=list(obs_data.get("available_commands", [])),
             done=payload.get("done", False),

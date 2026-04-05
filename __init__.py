@@ -1,10 +1,8 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
+"""IT Helpdesk Portal — Browser Environment for OpenEnv.
 
-"""Browser Env Environment."""
+A simulated corporate IT helpdesk where an agent performs real-world
+workplace tasks: employee lookup, ticket triage, and incident resolution.
+"""
 
 from .client import BrowserEnv
 from .models import BrowserAction, BrowserObservation

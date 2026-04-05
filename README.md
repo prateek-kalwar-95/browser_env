@@ -1,8 +1,8 @@
 ---
-title: Browser Env Environment Server
-emoji: 🌟
-colorFrom: gray
-colorTo: yellow
+title: IT Helpdesk Portal - Browser Environment
+emoji: 🖥️
+colorFrom: blue
+colorTo: indigo
 sdk: docker
 pinned: false
 app_port: 8000
@@ -11,245 +11,185 @@ tags:
   - openenv
 ---
 
-# Browser Env Environment
+# IT Helpdesk Portal - Browser Environment
 
-A simple test environment that echoes back messages. Perfect for testing the env APIs as well as demonstrating environment usage patterns.
+A simulated corporate IT helpdesk portal where AI agents perform **real-world workplace tasks**: looking up employee information, triaging support tickets, and resolving multi-step IT incidents. Built on the [OpenEnv](https://github.com/meta-pytorch/OpenEnv) framework.
 
-## Quick Start
+## Motivation
 
-The simplest way to use the Browser Env environment is through the `BrowserEnv` class:
+IT helpdesk operations - ticket triage, incident resolution, employee directory lookups - are performed millions of times daily across organizations. This environment provides a **safe, deterministic sandbox** for training and evaluating agents on these realistic workflows, with progressive difficulty from simple lookups to multi-step incident management.
 
-```python
-from browser_env import BrowserAction, BrowserEnv
+## Action Space
 
-try:
-    # Create environment from Docker image
-    browser_envenv = BrowserEnv.from_docker_image("browser_env-env:latest")
+Agents interact via single-line text commands:
 
-    # Reset
-    result = browser_envenv.reset()
-    print(f"Reset: {result.observation.echoed_message}")
+| Command | Syntax | Description |
+|---------|--------|-------------|
+| `goto` | `goto /path` | Navigate to a portal page |
+| `click` | `click <element_id>` | Click a link/button on the page |
+| `type` | `type <field> <value>` | Fill a text form field |
+| `select` | `select <field> <option>` | Choose from a dropdown |
+| `submit` | `submit` | Submit the current form |
+| `back` | `back` | Return to previous page |
+| `finish` | `finish` | Signal task completion (triggers grading) |
 
-    # Send multiple messages
-    messages = ["Hello, World!", "Testing echo", "Final message"]
-
-    for msg in messages:
-        result = browser_envenv.step(BrowserAction(message=msg))
-        print(f"Sent: '{msg}'")
-        print(f"  → Echoed: '{result.observation.echoed_message}'")
-        print(f"  → Length: {result.observation.message_length}")
-        print(f"  → Reward: {result.reward}")
-
-finally:
-    # Always clean up
-    browser_envenv.close()
+**Example commands:**
+```
+goto /directory
+click emp_E-3301
+type description The printer on floor 3 is jammed
+select category Hardware
+select priority High
+submit
+finish
 ```
 
-That's it! The `BrowserEnv.from_docker_image()` method handles:
-- Starting the Docker container
-- Waiting for the server to be ready
-- Connecting to the environment
-- Container cleanup when you call `close()`
+## Observation Space
 
-## Building the Docker Image
+Each step returns a `BrowserObservation` with:
 
-Before using the environment, you need to build the Docker image:
+| Field | Type | Description |
+|-------|------|-------------|
+| `url` | `str` | Current page path (e.g., `/directory/E-3301`) |
+| `page_title` | `str` | Page heading |
+| `page_content` | `str` | Full rendered page text with links, forms, content |
+| `task_id` | `str` | Task tier: `easy`, `medium`, or `hard` |
+| `task_instruction` | `str` | Natural-language goal |
+| `feedback` | `str` | Result of the last command |
+| `command_valid` | `bool` | Whether the last command was accepted |
+| `sub_goals_status` | `Dict[str, bool]` | Map of sub-goal names → completion status |
+| `progress` | `float` | Weighted sub-goal progress (0.0–1.0) |
+| `breadcrumb` | `List[str]` | Recent navigation trail |
+| `current_user` | `Optional[str]` | Logged-in username |
+| `notifications` | `List[str]` | System alerts |
+| `steps_remaining` | `int` | Steps left before timeout |
+| `grader_score` | `Optional[float]` | Final score when episode ends |
+| `available_commands` | `List[str]` | Allowed command patterns |
+
+## Task Descriptions
+
+### Task 1: Employee Information Lookup (`easy`)
+**Objective**: Navigate to the employee directory, find a specific employee, and view their profile page.
+
+**Sub-goals**: Navigate to `/directory` → View target employee's profile → Finish on their page.
+
+**Difficulty**: Low — requires 2-3 commands. Tests basic navigation.
+
+**Randomized per episode**: Target employee name, target attribute, employee roster.
+
+### Task 2: Support Ticket Triage (`medium`)
+**Objective**: Create a new support ticket with the correct category, priority, assignee, and a description containing a specific keyword.
+
+**Sub-goals**: Navigate to ticket form → Set category → Set priority → Include keyword → Set assignee → Submit.
+
+**Difficulty**: Medium — requires 6-8 commands. Tests form interaction and multi-field accuracy.
+
+**Randomized per episode**: Category, priority, keyword, assignee.
+
+### Task 3: Incident Resolution Workflow (`hard`)
+**Objective**: Log in with credentials, find a specific system incident, update its status through the investigation lifecycle, add root cause notes, and resolve it.
+
+**Sub-goals**: Log in → Find incident → Set "investigating" → Add root cause note → Set "resolved".
+
+**Difficulty**: Hard — requires 10-15 commands. Tests authentication, multi-step workflows, and form interactions across multiple pages.
+
+**Randomized per episode**: Credentials, incident ID, system name, root cause keyword.
+
+## Reward Function
+
+Rewards provide **meaningful signal over the full trajectory**, not just at episode end:
+
+- **Per-step progress**: Reward proportional to sub-goal completion deltas
+- **Positive shaping**: Small bonus (+0.02) for commands that advance progress
+- **Negative shaping**: Penalty (-0.04 to -0.15) for invalid commands or no-progress steps
+- **Final grading**: Weighted sum of sub-goal completion (0.0–1.0), deterministic
+
+## Setup & Usage
+
+### Docker (recommended)
 
 ```bash
-# From project root
-docker build -t browser_env-env:latest -f server/Dockerfile .
+# Build
+docker build -t browser_env:latest .
+
+# Run
+docker run -p 8000:8000 browser_env:latest
+
+# Health check
+curl http://localhost:8000/health
 ```
 
-## Deploying to Hugging Face Spaces
-
-You can easily deploy your OpenEnv environment to Hugging Face Spaces using the `openenv push` command:
+### Local Development
 
 ```bash
-# From the environment directory (where openenv.yaml is located)
+# Install dependencies
+uv sync
+
+# Start the server
+uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
+
+# Run the smoke test
+python server/browser_env_environment.py
+```
+
+### Run Inference
+
+```bash
+# Set your API key
+export HF_TOKEN=your_token_here
+# or
+export OPENAI_API_KEY=your_key_here
+
+# Run all 3 tasks
+python inference.py
+```
+
+### Deploy to Hugging Face Spaces
+
+```bash
 openenv push
-
-# Or specify options
-openenv push --namespace my-org --private
 ```
 
-The `openenv push` command will:
-1. Validate that the directory is an OpenEnv environment (checks for `openenv.yaml`)
-2. Prepare a custom build for Hugging Face Docker space (enables web interface)
-3. Upload to Hugging Face (ensuring you're logged in)
+## Baseline Scores
 
-### Prerequisites
+| Model | Easy | Medium | Hard | Average |
+|-------|------|--------|------|---------|
+| Qwen2.5-72B-Instruct | ~1.00 | ~0.75 | ~0.45 | ~0.73 |
 
-- Authenticate with Hugging Face: The command will prompt for login if not already authenticated
+*Scores are approximate and may vary due to model temperature.*
 
-### Options
+## Portal Structure
 
-- `--directory`, `-d`: Directory containing the OpenEnv environment (defaults to current directory)
-- `--repo-id`, `-r`: Repository ID in format 'username/repo-name' (defaults to 'username/env-name' from openenv.yaml)
-- `--base-image`, `-b`: Base Docker image to use (overrides Dockerfile FROM)
-- `--private`: Deploy the space as private (default: public)
-
-### Examples
-
-```bash
-# Push to your personal namespace (defaults to username/env-name from openenv.yaml)
-openenv push
-
-# Push to a specific repository
-openenv push --repo-id my-org/my-env
-
-# Push with a custom base image
-openenv push --base-image ghcr.io/meta-pytorch/openenv-base:latest
-
-# Push as a private space
-openenv push --private
-
-# Combine options
-openenv push --repo-id my-org/my-env --base-image custom-base:latest --private
 ```
-
-After deployment, your space will be available at:
-`https://huggingface.co/spaces/<repo-id>`
-
-The deployed space includes:
-- **Web Interface** at `/web` - Interactive UI for exploring the environment
-- **API Documentation** at `/docs` - Full OpenAPI/Swagger interface
-- **Health Check** at `/health` - Container health monitoring
-- **WebSocket** at `/ws` - Persistent session endpoint for low-latency interactions
-
-## Environment Details
-
-### Action
-**BrowserAction**: Contains a single field
-- `message` (str) - The message to echo back
-
-### Observation
-**BrowserObservation**: Contains the echo response and metadata
-- `echoed_message` (str) - The message echoed back
-- `message_length` (int) - Length of the message
-- `reward` (float) - Reward based on message length (length × 0.1)
-- `done` (bool) - Always False for echo environment
-- `metadata` (dict) - Additional info like step count
-
-### Reward
-The reward is calculated as: `message_length × 0.1`
-- "Hi" → reward: 0.2
-- "Hello, World!" → reward: 1.3
-- Empty message → reward: 0.0
-
-## Advanced Usage
-
-### Connecting to an Existing Server
-
-If you already have a Browser Env environment server running, you can connect directly:
-
-```python
-from browser_env import BrowserEnv
-
-# Connect to existing server
-browser_envenv = BrowserEnv(base_url="<ENV_HTTP_URL_HERE>")
-
-# Use as normal
-result = browser_envenv.reset()
-result = browser_envenv.step(BrowserAction(message="Hello!"))
-```
-
-Note: When connecting to an existing server, `browser_envenv.close()` will NOT stop the server.
-
-### Using the Context Manager
-
-The client supports context manager usage for automatic connection management:
-
-```python
-from browser_env import BrowserAction, BrowserEnv
-
-# Connect with context manager (auto-connects and closes)
-with BrowserEnv(base_url="http://localhost:8000") as env:
-    result = env.reset()
-    print(f"Reset: {result.observation.echoed_message}")
-    # Multiple steps with low latency
-    for msg in ["Hello", "World", "!"]:
-        result = env.step(BrowserAction(message=msg))
-        print(f"Echoed: {result.observation.echoed_message}")
-```
-
-The client uses WebSocket connections for:
-- **Lower latency**: No HTTP connection overhead per request
-- **Persistent session**: Server maintains your environment state
-- **Efficient for episodes**: Better for many sequential steps
-
-### Concurrent WebSocket Sessions
-
-The server supports multiple concurrent WebSocket connections. To enable this,
-modify `server/app.py` to use factory mode:
-
-```python
-# In server/app.py - use factory mode for concurrent sessions
-app = create_app(
-    BrowserEnvironment,  # Pass class, not instance
-    BrowserAction,
-    BrowserObservation,
-    max_concurrent_envs=4,  # Allow 4 concurrent sessions
-)
-```
-
-Then multiple clients can connect simultaneously:
-
-```python
-from browser_env import BrowserAction, BrowserEnv
-from concurrent.futures import ThreadPoolExecutor
-
-def run_episode(client_id: int):
-    with BrowserEnv(base_url="http://localhost:8000") as env:
-        result = env.reset()
-        for i in range(10):
-            result = env.step(BrowserAction(message=f"Client {client_id}, step {i}"))
-        return client_id, result.observation.message_length
-
-# Run 4 episodes concurrently
-with ThreadPoolExecutor(max_workers=4) as executor:
-    results = list(executor.map(run_episode, range(4)))
-```
-
-## Development & Testing
-
-### Direct Environment Testing
-
-Test the environment logic directly without starting the HTTP server:
-
-```bash
-# From the server directory
-python3 server/browser_env_environment.py
-```
-
-This verifies that:
-- Environment resets correctly
-- Step executes actions properly
-- State tracking works
-- Rewards are calculated correctly
-
-### Running Locally
-
-Run the server locally for development:
-
-```bash
-uvicorn server.app:app --reload
+/                          Dashboard — stats, notifications, navigation
+├── /directory             Employee roster (randomized per episode)
+│   └── /directory/<id>    Employee profile detail
+├── /tickets               Support ticket queue
+│   ├── /tickets/new       Create new ticket form
+│   └── /tickets/<id>      Ticket detail
+├── /incidents             Active incidents dashboard
+│   └── /incidents/<id>    Incident detail + resolution form
+├── /login                 Authentication
+└── /settings              User preferences
 ```
 
 ## Project Structure
 
 ```
 browser_env/
-├── .dockerignore         # Docker build exclusions
-├── __init__.py            # Module exports
-├── README.md              # This file
-├── openenv.yaml           # OpenEnv manifest
-├── pyproject.toml         # Project metadata and dependencies
-├── uv.lock                # Locked dependencies (generated)
-├── client.py              # BrowserEnv client
-├── models.py              # Action and Observation models
+├── __init__.py              # Module exports
+├── models.py                # BrowserAction & BrowserObservation models
+├── client.py                # BrowserEnv WebSocket client
+├── inference.py             # Baseline inference script (runs all 3 tasks)
+├── openenv.yaml             # OpenEnv manifest
+├── pyproject.toml           # Dependencies
+├── Dockerfile               # Container image
+├── .env                     # Configuration
+├── README.md                # This file
 └── server/
-    ├── __init__.py        # Server module exports
-    ├── browser_env_environment.py  # Core environment logic
-    ├── app.py             # FastAPI application (HTTP + WebSocket endpoints)
-    └── Dockerfile         # Container image definition
+    ├── __init__.py           # Server module exports
+    ├── app.py                # FastAPI application
+    ├── browser_env_environment.py  # OpenEnv Environment implementation
+    ├── task_engine.py        # Procedural task generation & grading
+    └── simulation.py         # Portal simulation (pages, commands, state)
 ```
