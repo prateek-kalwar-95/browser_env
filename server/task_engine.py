@@ -524,8 +524,11 @@ def grade_task(task: TaskInstance, session: Any) -> Tuple[float, str]:
     if missed:
         parts.append(f"missed: {', '.join(missed)}")
 
-    rationale = f"Score {score:.2f} - " + "; ".join(parts)
-    return min(1.0, score), rationale
+    # Scale score from [0.0, 1.0] to [0.05, 0.95] to meet the strictly (0, 1) requirement
+    scaled_score = 0.05 + (min(1.0, score) * 0.90)
+    
+    rationale = f"Score {scaled_score:.2f} (raw {score:.2f}) - " + "; ".join(parts)
+    return scaled_score, rationale
 
 
 # ---------------------------------------------------------------------------
